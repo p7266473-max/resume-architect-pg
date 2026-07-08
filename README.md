@@ -5,6 +5,7 @@ Resume Architect PG is a premium, client-side, interactive resume engineering to
 ## Features
 
 - **Double-Audience Precision Layouts**: Seamless switching between MBA profiles (with specializations like Finance, Marketing, HR, Operations, Systems) and UG branches (Engineering, Science, Arts, Commerce, BBA).
+- **Market Scout (Real-time Gap Analysis)**: Integrated AI agents scrape live job market intelligence via DuckDuckGo and perform a critical gap analysis against your academic background.
 - **Tailored Suggestion Engine**: Pre-loaded, industry-vetted career summaries and impact-driven achievement bullets to align with target domain expertise (e.g. Investment Banking, Supply Chain, Software Engineering).
 - **ATS-Optimized Formatting**: Clear structural hierarchies and keyword alignment.
 - **Multiple Design Templates**: Real-time styling updates including Modern Executive, Slate Minimalist, and Technical Elegant.
