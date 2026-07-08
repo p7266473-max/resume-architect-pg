@@ -8,7 +8,7 @@ import sys
 import subprocess
 
 def install_missing_packages():
-    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai", "xhtml2pdf", "python-pptx"]
+    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai", "xhtml2pdf", "python-pptx", "duckduckgo-search"]
     for pkg in required:
         try:
             if pkg == "google-genai":
@@ -17,6 +17,8 @@ def install_missing_packages():
                 import docx
             elif pkg == "python-pptx":
                 import pptx
+            elif pkg == "duckduckgo-search":
+                import duckduckgo_search
             else:
                 __import__(pkg)
         except ImportError:
