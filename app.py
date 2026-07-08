@@ -4,9 +4,29 @@ Future Resume Architect (PG Edition) - Clean Orchestrator Shell
 Production-ready Streamlit application shell that orchestrates modular logic.
 """
 
+import sys
+import subprocess
+
+def install_missing_packages():
+    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai"]
+    for pkg in required:
+        try:
+            if pkg == "google-genai":
+                import google.genai
+            elif pkg == "python-docx":
+                import docx
+            else:
+                __import__(pkg)
+        except ImportError:
+            # Install in user space to avoid permission issues
+            subprocess.run([sys.executable, "-m", "pip", "install", pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+install_missing_packages()
+
 import logging
 import os
 import streamlit as st
+
 
 # Import core configurations & datasets
 from core.prompts import (
