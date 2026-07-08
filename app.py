@@ -8,7 +8,7 @@ import sys
 import subprocess
 
 def install_missing_packages():
-    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai"]
+    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai", "pdfkit"]
     for pkg in required:
         try:
             if pkg == "google-genai":
@@ -18,7 +18,6 @@ def install_missing_packages():
             else:
                 __import__(pkg)
         except ImportError:
-            # Install in user space to avoid permission issues
             subprocess.run([sys.executable, "-m", "pip", "install", pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 install_missing_packages()
@@ -34,6 +33,7 @@ from core.prompts import (
     APP_SUBTITLE,
     APP_ICON,
     THEMES,
+    THEME_COLORS,
 )
 from core.data import STREAM_DATA
 from core.styles import inject_custom_css
@@ -51,6 +51,8 @@ from core.doc_maker import (
     generate_docx_bytes,
     generate_markdown,
     generate_ats_text,
+    generate_premium_pdf_html,
+    generate_pdf_from_html,
 )
 
 # ============================================================
@@ -88,7 +90,7 @@ theme: str = st.sidebar.selectbox(
     "🎨 Output Theme",
     options=THEMES,
     index=0,
-    help="Select the color palette for your final Word document.",
+    help="Select the color palette for your final documents.",
 )
 
 st.sidebar.markdown("---")
@@ -142,7 +144,7 @@ if build_clicked:
 
     # Clear previous widget states to allow new AI defaults to load
     for key in list(st.session_state.keys()):
-        if key.startswith(("edit_", "role_", "company_", "duration_", "achievements_")):
+        if key.startswith(("edit_", "role_", "company_", "duration_", "achievements_", "pdf_html", "last_theme")):
             del st.session_state[key]
     st.session_state["resume_data"] = None
     st.session_state["plan_data"] = None
@@ -233,6 +235,20 @@ if st.session_state["resume_data"] is not None:
 
     # ── PREVIEW ────────────────────────────────────────────
     render_preview(final_data)
+    
+    st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+
+    # ── PDF CUSTOMIZATION WINDOW ───────────────────────────
+    with st.expander("✨ Advanced PDF Customization (Industry Standard Design)", expanded=False):
+        st.markdown("Below is the HTML template for your stunning PDF resume. You can make manual tweaks here before generating the final PDF!")
+        theme_colors_dict = THEME_COLORS.get(theme, THEME_COLORS["Modern-Tech"])
+        
+        if "pdf_html" not in st.session_state or st.session_state.get("last_theme") != theme:
+            st.session_state["pdf_html"] = generate_premium_pdf_html(final_data, theme_colors_dict)
+            st.session_state["last_theme"] = theme
+            
+        custom_html = st.text_area("HTML & CSS Source", value=st.session_state["pdf_html"], height=350)
+        st.session_state["pdf_html"] = custom_html
 
     # ── GENERATE ALL EXPORTS ───────────────────────────────
     with st.spinner("Building export files…"):
@@ -242,24 +258,41 @@ if st.session_state["resume_data"] is not None:
             logger.error("DOCX generation failed: %s", exc)
             st.error(f"❌ DOCX generation failed: {exc}")
             docx_bytes = b""
+            
+        try:
+            pdf_bytes = generate_pdf_from_html(st.session_state["pdf_html"])
+        except Exception as exc:
+            logger.error("PDF generation failed: %s", exc)
+            st.warning(f"⚠️ PDF generation failed (you may need wkhtmltopdf installed): {exc}")
+            pdf_bytes = b""
 
         md_content = generate_markdown(final_data)
         ats_content = generate_ats_text(final_data)
 
     # ── DOWNLOAD BUTTONS ───────────────────────────────────
     st.markdown("### 📥 Download Your Masterpiece")
-    dl1, dl2, dl3 = st.columns(3)
+    dl1, dl2, dl3, dl4 = st.columns(4)
 
     with dl1:
+        if pdf_bytes:
+            st.download_button(
+                label="🎨 Stunning PDF (.pdf)",
+                data=pdf_bytes,
+                file_name="Future_Resume_Premium.pdf",
+                mime="application/pdf",
+                type="primary"
+            )
+
+    with dl2:
         if docx_bytes:
             st.download_button(
-                label="📄 Premium Word Document (.docx)",
+                label="📄 Premium Word (.docx)",
                 data=docx_bytes,
                 file_name="Future_Resume.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
 
-    with dl2:
+    with dl3:
         st.download_button(
             label="📝 Markdown (.md)",
             data=md_content.encode("utf-8"),
@@ -267,7 +300,7 @@ if st.session_state["resume_data"] is not None:
             mime="text/markdown",
         )
 
-    with dl3:
+    with dl4:
         st.download_button(
             label="📃 ATS Plain Text (.txt)",
             data=ats_content.encode("utf-8"),
