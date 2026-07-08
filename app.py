@@ -8,7 +8,7 @@ import sys
 import subprocess
 
 def install_missing_packages():
-    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai", "pdfkit"]
+    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai", "xhtml2pdf"]
     for pkg in required:
         try:
             if pkg == "google-genai":
@@ -79,11 +79,11 @@ render_hero()
 
 st.sidebar.markdown("## ⚙️ Configuration")
 
-api_key: str = st.sidebar.text_input(
-    "🔑 Gemini API Key",
+api_keys_input: str = st.sidebar.text_area(
+    "🔑 Gemini API Keys",
     value=os.environ.get("GEMINI_API_KEY", ""),
-    type="password",
-    help="Get your key at https://aistudio.google.com/apikey",
+    height=100,
+    help="Paste up to 3 API keys separated by commas or new lines. We will try them in order if one gets exhausted.",
 )
 
 theme: str = st.sidebar.selectbox(
@@ -138,8 +138,10 @@ if build_clicked:
     if not selected_roles:
         st.warning("⚠️ Please select at least one future career role.")
         st.stop()
-    if not api_key.strip():
-        st.error("🔑 Please enter your Gemini API Key in the sidebar.")
+        
+    keys = [k.strip() for k in api_keys_input.replace(',', '\n').split('\n') if k.strip()]
+    if not keys:
+        st.error("🔑 Please enter at least one Gemini API Key in the sidebar.")
         st.stop()
 
     # Clear previous widget states to allow new AI defaults to load
@@ -149,25 +151,33 @@ if build_clicked:
     st.session_state["resume_data"] = None
     st.session_state["plan_data"] = None
 
-    # Client
-    try:
-        client = get_gemini_client(api_key.strip())
-    except Exception as exc:
-        logger.error("Client init failed: %s", exc)
-        st.error(f"❌ Failed to initialise Gemini client: {exc}")
-        st.stop()
-
     status = st.empty()
+    success = False
+    
+    for i, current_key in enumerate(keys[:3]):
+        try:
+            client = get_gemini_client(current_key)
+            
+            with st.spinner(f"Using API Key {i+1}... Searching the web..."):
+                research_summary = run_research_pass(client, selected_roles, status, selected_stream)
+                if not research_summary: raise Exception("Research pass failed")
+                st.session_state["research_summary"] = research_summary
 
-    # Web Research Grounding Pass
-    with st.spinner("Searching the web for top free/open-source certifications for your path..."):
-        research_summary = run_research_pass(client, selected_roles, status, selected_stream)
-        st.session_state["research_summary"] = research_summary
-
-    # Planning Phase
-    with st.spinner("Architecting your proposed 3-year resume structure..."):
-        plan = run_planning_pass(client, selected_roles, research_summary, selected_stream)
-        st.session_state["plan_data"] = plan
+            with st.spinner(f"Using API Key {i+1}... Architecting proposed structure..."):
+                plan = run_planning_pass(client, selected_roles, research_summary, selected_stream)
+                if not plan: raise Exception("Planning pass failed")
+                st.session_state["plan_data"] = plan
+                
+            success = True
+            break
+        except Exception as exc:
+            logger.warning("Key %d failed: %s", i+1, exc)
+            if i < len(keys[:3]) - 1:
+                st.warning(f"⚠️ API Key {i+1} failed. Trying next key...")
+                
+    if not success:
+        st.error("❌ All provided API keys failed. Please check your quota or credentials.")
+        st.stop()
 
 # ── HUMAN IN THE LOOP PLAN VIEW ──────────────────────────
 if st.session_state["plan_data"] is not None and st.session_state["resume_data"] is None:
@@ -189,37 +199,50 @@ if st.session_state["plan_data"] is not None and st.session_state["resume_data"]
     approve_clicked = st.button("✅ Approve Plan & Build Full Resume")
     
     if approve_clicked:
-        try:
-            client = get_gemini_client(api_key.strip())
-        except Exception as exc:
-            st.error(f"🔑 Please enter your Gemini API Key in the sidebar.")
+        keys = [k.strip() for k in api_keys_input.replace(',', '\n').split('\n') if k.strip()]
+        if not keys:
+            st.error("🔑 Please enter your Gemini API Key in the sidebar.")
             st.stop()
             
         progress = st.progress(0, text="Building full resume...")
         status = st.empty()
+        success = False
         
-        # Pass 1: Extraction
-        progress.progress(20, text="Pass 1: Structuring your future resume details…")
-        extracted = run_extraction_pass(
-            client,
-            selected_roles,
-            st.session_state["research_summary"],
-            status,
-            selected_stream,
-            STREAM_DATA[selected_stream]["degree_placeholder"]
-        )
-        
-        if extracted is None:
-            progress.progress(100, text="Pipeline failed.")
+        for i, current_key in enumerate(keys[:3]):
+            try:
+                client = get_gemini_client(current_key)
+                
+                # Pass 1: Extraction
+                progress.progress(20, text=f"Key {i+1}: Structuring your future resume details…")
+                extracted = run_extraction_pass(
+                    client,
+                    selected_roles,
+                    st.session_state["research_summary"],
+                    status,
+                    selected_stream,
+                    STREAM_DATA[selected_stream]["degree_placeholder"]
+                )
+                if not extracted: raise Exception("Extraction pipeline failed")
+                
+                # Pass 2: Enhancement
+                progress.progress(60, text=f"Key {i+1}: Polishing vocabulary and ATS style…")
+                enhanced = run_enhancement_pass(client, extracted, status)
+                if not enhanced: raise Exception("Enhancement pipeline failed")
+                
+                progress.progress(100, text="Build complete!")
+                st.session_state["resume_data"] = enhanced
+                st.session_state["plan_data"] = None
+                success = True
+                break
+            except Exception as exc:
+                logger.warning("Key %d failed during build: %s", i+1, exc)
+                if i < len(keys[:3]) - 1:
+                    status.warning(f"⚠️ API Key {i+1} failed. Trying next key...")
+                    
+        if not success:
+            progress.progress(100, text="Pipeline failed on all keys.")
             st.stop()
             
-        # Pass 2: Enhancement
-        progress.progress(60, text="Pass 2: Polishing vocabulary and ATS style…")
-        enhanced = run_enhancement_pass(client, extracted, status)
-        
-        progress.progress(100, text="Build complete!")
-        st.session_state["resume_data"] = enhanced
-        st.session_state["plan_data"] = None
         st.rerun()
 
 

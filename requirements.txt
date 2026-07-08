@@ -3,4 +3,4 @@ google-genai
 python-docx
 smolagents
 openai
-pdfkit
+xhtml2pdf
