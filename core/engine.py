@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from google import genai
 from google.genai import types
+from smolagents import OpenAIModel, ToolCallingAgent, DuckDuckGoSearchTool
 
 from core.prompts import (
     GEMINI_MODEL,
@@ -78,8 +79,6 @@ def run_research_pass(
     selected_stream: str = "BSc Computer Science / IT",
 ) -> str:
     """Pass 0: Use smolagents ToolCallingAgent and DuckDuckGoSearchTool to find the best free courses/certifications."""
-    from smolagents import OpenAIModel, ToolCallingAgent, DuckDuckGoSearchTool
-    
     logger.info("Starting smolagents research pass...")
     if status_ph:
         status_ph.info("🕵️ Smolagents is launching search tools to research top PG certifications...")
