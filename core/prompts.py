@@ -42,42 +42,9 @@ CAREER_OPTIONS = [
 ]
 
 # Gemini response schema for structured output
-RESUME_SCHEMA = types.Schema(
-    type=types.Type.OBJECT,
-    properties={
-        "Name": types.Schema(type=types.Type.STRING, description="Full candidate name, or '[Your Name]' if not found"),
-        "Email": types.Schema(type=types.Type.STRING, description="Email address, or '[Your Email Address]'"),
-        "Phone": types.Schema(type=types.Type.STRING, description="Phone number, or '[Your Phone Number]'"),
-        "LinkedIn": types.Schema(type=types.Type.STRING, description="LinkedIn URL, or '[Your LinkedIn Profile URL]'"),
-        "Location": types.Schema(type=types.Type.STRING, description="City/Country, or '[Your City, State]'"),
-        "Summary": types.Schema(type=types.Type.STRING, description="A highly ambitious, forward-looking summary of a recent PG/MBA graduate."),
-        "Experience": types.Schema(
-            type=types.Type.ARRAY,
-            items=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "Role": types.Schema(type=types.Type.STRING, description="Name of the Business Case / Project (e.g. 'Valuation & Advisory Report', 'Market Entry Strategy Campaign')"),
-                    "Company": types.Schema(type=types.Type.STRING, description="Context (e.g. 'MBA Capstone Project', 'Consulting Case Study')"),
-                    "Duration": types.Schema(type=types.Type.STRING, description="e.g. 'Jan 2026 - May 2026' or '2025 - 2026' (DO NOT use Spring/Fall/Summer)"),
-                    "Achievements": types.Schema(
-                        type=types.Type.ARRAY,
-                        items=types.Schema(type=types.Type.STRING),
-                    ),
-                },
-                required=["Role", "Company", "Duration", "Achievements"],
-            ),
-        ),
-        "Skills": types.Schema(
-            type=types.Type.ARRAY,
-            items=types.Schema(type=types.Type.STRING),
-        ),
-        "Education": types.Schema(
-            type=types.Type.ARRAY,
-            items=types.Schema(type=types.Type.STRING),
-        ),
-    },
-    required=["Name", "Email", "Phone", "LinkedIn", "Location", "Summary", "Experience", "Skills", "Education"],
-)
+from core.models import ResumeSchema
+
+RESUME_SCHEMA = ResumeSchema
 
 PASS1_SYSTEM_PROMPT = """You are a "Future Career Architect". 
 Your user is currently a Postgraduate / MBA student. They have selected up to 3 target roles they want to achieve in the next 2-3 years.
