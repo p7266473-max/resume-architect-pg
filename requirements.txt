@@ -4,3 +4,4 @@ python-docx
 smolagents
 openai
 xhtml2pdf
+python-pptx

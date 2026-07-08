@@ -8,13 +8,15 @@ import sys
 import subprocess
 
 def install_missing_packages():
-    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai", "xhtml2pdf"]
+    required = ["streamlit", "google-genai", "python-docx", "smolagents", "openai", "xhtml2pdf", "python-pptx"]
     for pkg in required:
         try:
             if pkg == "google-genai":
                 import google.genai
             elif pkg == "python-docx":
                 import docx
+            elif pkg == "python-pptx":
+                import pptx
             else:
                 __import__(pkg)
         except ImportError:
@@ -53,6 +55,7 @@ from core.doc_maker import (
     generate_ats_text,
     generate_premium_pdf_html,
     generate_pdf_from_html,
+    generate_pptx_bytes,
 )
 
 # ============================================================
@@ -196,6 +199,7 @@ if st.session_state["plan_data"] is not None and st.session_state["resume_data"]
             st.markdown(f"- {cert}")
             
     st.markdown("I've designed this 3-year plan sequence. Do you agree with this direction?")
+    user_feedback = st.text_area("Optional changes or directions (e.g. 'Focus more on Cloud', 'Add an AWS cert')", "")
     approve_clicked = st.button("✅ Approve Plan & Build Full Resume")
     
     if approve_clicked:
@@ -220,7 +224,8 @@ if st.session_state["plan_data"] is not None and st.session_state["resume_data"]
                     st.session_state["research_summary"],
                     status,
                     selected_stream,
-                    STREAM_DATA[selected_stream]["degree_placeholder"]
+                    STREAM_DATA[selected_stream]["degree_placeholder"],
+                    user_feedback
                 )
                 if not extracted: raise Exception("Extraction pipeline failed")
                 
@@ -278,45 +283,60 @@ if st.session_state["resume_data"] is not None:
             pdf_bytes = b""
             st.error("⚠️ PDF generation failed. If you're on Streamlit Cloud, please reboot the app to install 'wkhtmltopdf' via packages.txt.")
 
+        try:
+            pptx_bytes = generate_pptx_bytes(final_data, theme)
+        except Exception as exc:
+            logger.error("PPTX generation failed: %s", exc)
+            pptx_bytes = b""
+
         md_content = generate_markdown(final_data)
         ats_content = generate_ats_text(final_data)
 
     # ── DOWNLOAD BUTTONS ───────────────────────────────────
     st.markdown("### 📥 Download Your Masterpiece")
-    dl1, dl2, dl3, dl4 = st.columns(4)
+    dl1, dl2, dl3, dl4, dl5 = st.columns(5)
 
     with dl1:
         if pdf_bytes:
             st.download_button(
-                label="🎨 Stunning PDF (.pdf)",
+                label="🎨 Stunning PDF",
                 data=pdf_bytes,
                 file_name="Future_Resume_Premium.pdf",
                 mime="application/pdf",
                 type="primary"
             )
         else:
-            st.button("🚫 PDF Not Available", disabled=True)
+            st.button("🚫 PDF Error", disabled=True)
 
     with dl2:
         if docx_bytes:
             st.download_button(
-                label="📄 Premium Word (.docx)",
+                label="📄 Premium Word",
                 data=docx_bytes,
                 file_name="Future_Resume.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
-
+            
     with dl3:
+        if pptx_bytes:
+            st.download_button(
+                label="📊 PowerPoint",
+                data=pptx_bytes,
+                file_name="Future_Resume.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
+
+    with dl4:
         st.download_button(
-            label="📝 Markdown (.md)",
+            label="📝 Markdown",
             data=md_content.encode("utf-8"),
             file_name="Future_Resume.md",
             mime="text/markdown",
         )
 
-    with dl4:
+    with dl5:
         st.download_button(
-            label="📃 ATS Plain Text (.txt)",
+            label="📃 ATS Text",
             data=ats_content.encode("utf-8"),
             file_name="Future_Resume_ATS.txt",
             mime="text/plain",
