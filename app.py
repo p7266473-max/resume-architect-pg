@@ -23,6 +23,7 @@ from core.ui import render_hero, render_preview, render_editable_fields
 from core.engine import (
     get_gemini_client,
     run_research_pass,
+    run_planning_pass,
     run_extraction_pass,
     run_enhancement_pass,
 )
@@ -102,9 +103,13 @@ build_clicked: bool = st.button("🚀 Generate My Future Resume")
 # PIPELINE
 # ============================================================
 
-# Initialize session state for resume data
+# Initialize session state keys
 if "resume_data" not in st.session_state:
     st.session_state["resume_data"] = None
+if "plan_data" not in st.session_state:
+    st.session_state["plan_data"] = None
+if "research_summary" not in st.session_state:
+    st.session_state["research_summary"] = None
 
 if build_clicked:
     # Input validation
@@ -119,6 +124,8 @@ if build_clicked:
     for key in list(st.session_state.keys()):
         if key.startswith(("edit_", "role_", "company_", "duration_", "achievements_")):
             del st.session_state[key]
+    st.session_state["resume_data"] = None
+    st.session_state["plan_data"] = None
 
     # Client
     try:
@@ -128,44 +135,71 @@ if build_clicked:
         st.error(f"❌ Failed to initialise Gemini client: {exc}")
         st.stop()
 
-    progress = st.progress(0, text="Initialising pipeline…")
     status = st.empty()
 
     # Web Research Grounding Pass
-    progress.progress(5, text="Web Research: Finding the best free courses…")
     with st.spinner("Searching the web for top free/open-source certifications for your path..."):
         research_summary = run_research_pass(client, selected_roles, status, selected_stream)
+        st.session_state["research_summary"] = research_summary
 
-    # Pass 1
-    progress.progress(15, text="Pass 1: Architecting your future resume…")
-    with st.spinner("Building your 3-year career trajectory…"):
+    # Planning Phase
+    with st.spinner("Architecting your proposed 3-year resume structure..."):
+        plan = run_planning_pass(client, selected_roles, research_summary, selected_stream)
+        st.session_state["plan_data"] = plan
+
+# ── HUMAN IN THE LOOP PLAN VIEW ──────────────────────────
+if st.session_state["plan_data"] is not None and st.session_state["resume_data"] is None:
+    st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+    st.markdown("### 🗺️ Proposed 3-Year Resume Blueprint")
+    st.info(f"**Core Focus Theme:** {st.session_state['plan_data'].get('Core_Focus', '')}")
+    
+    col_plan1, col_plan2 = st.columns(2)
+    with col_plan1:
+        st.markdown("**Proposed Business Projects & Case Studies:**")
+        for proj in st.session_state["plan_data"].get("Proposed_Projects", []):
+            st.markdown(f"- {proj}")
+    with col_plan2:
+        st.markdown("**Proposed Certifications to Earn:**")
+        for cert in st.session_state["plan_data"].get("Proposed_Certifications", []):
+            st.markdown(f"- {cert}")
+            
+    st.markdown("I've designed this 3-year plan sequence. Do you agree with this direction?")
+    approve_clicked = st.button("✅ Approve Plan & Build Full Resume")
+    
+    if approve_clicked:
+        try:
+            client = get_gemini_client(api_key.strip())
+        except Exception as exc:
+            st.error(f"🔑 Please enter your Gemini API Key in the sidebar.")
+            st.stop()
+            
+        progress = st.progress(0, text="Building full resume...")
+        status = st.empty()
+        
+        # Pass 1: Extraction
+        progress.progress(20, text="Pass 1: Structuring your future resume details…")
         extracted = run_extraction_pass(
             client,
             selected_roles,
-            research_summary,
+            st.session_state["research_summary"],
             status,
             selected_stream,
             STREAM_DATA[selected_stream]["degree_placeholder"]
         )
-
-    if extracted is None:
-        progress.progress(100, text="Pipeline failed.")
-        st.stop()
-
-    progress.progress(55, text="Pass 1 complete ✓")
-    status.success("✅ Architecture complete.")
-
-    # Pass 2
-    progress.progress(60, text="Pass 2: Polishing vocabulary…")
-    with st.spinner("Elevating resume language to a top-tier standard…"):
+        
+        if extracted is None:
+            progress.progress(100, text="Pipeline failed.")
+            st.stop()
+            
+        # Pass 2: Enhancement
+        progress.progress(60, text="Pass 2: Polishing vocabulary and ATS style…")
         enhanced = run_enhancement_pass(client, extracted, status)
+        
+        progress.progress(100, text="Build complete!")
+        st.session_state["resume_data"] = enhanced
+        st.session_state["plan_data"] = None
+        st.rerun()
 
-    progress.progress(85, text="Pass 2 complete ✓")
-    status.success("✅ Enhancement complete.")
-    progress.progress(100, text="Pipeline complete!")
-    status.empty()
-
-    st.session_state["resume_data"] = enhanced
 
 if st.session_state["resume_data"] is not None:
     st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
