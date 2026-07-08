@@ -19,9 +19,15 @@ from core.prompts import (
 
 logger = logging.getLogger("resume_architect")
 
-def get_gemini_client(api_key: str) -> genai.Client:
-    """Initialise and return the Gemini API client."""
-    return genai.Client(api_key=api_key)
+class ClientWrapper:
+    """Wrapper to hold both the raw GenAI client and the API key for smolagents."""
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.genai_client = genai.Client(api_key=api_key)
+
+def get_gemini_client(api_key: str) -> ClientWrapper:
+    """Initialise and return the wrapped GenAI client."""
+    return ClientWrapper(api_key=api_key)
 
 def call_gemini_with_retry(
     client: genai.Client,
@@ -66,33 +72,63 @@ def call_gemini_with_retry(
     return None
 
 def run_research_pass(
-    client: genai.Client,
+    client_wrapper: ClientWrapper,
     target_roles: list[str],
     status_ph: Any,
     selected_stream: str = "BSc Computer Science / IT",
 ) -> str:
-    """Pass 0: Use Google Search to find the best free courses/certifications for the target roles."""
-    roles_str = ", ".join(target_roles)
-    contents = (
-        f"The user is a {selected_stream} student aiming to become one of the following in 2-3 years: {roles_str}.\n\n"
-        "Search the web for the absolute best, highly-recognized FREE or open-source online courses, bootcamps, and certifications "
-        "(e.g., from freeCodeCamp, Harvard CS50, AWS Educate, Google Cloud Skill Boost, DeepLearning.AI via financial aid, OSSU) "
-        "that are mandatory or highly recommended for these specific roles. Summarize the best 3-5 free courses they should take."
-    )
+    """Pass 0: Use smolagents ToolCallingAgent and DuckDuckGoSearchTool to find the best free courses/certifications."""
+    from smolagents import OpenAIModel, ToolCallingAgent, DuckDuckGoSearchTool
     
-    tools = [types.Tool(google_search=types.GoogleSearch())]
-    
-    result = call_gemini_with_retry(
-        client=client,
-        prompt=contents,
-        system_instruction="You are a career research assistant using Google Search to find high-value FREE tech courses.",
-        tools=tools,
-        status_ph=status_ph
-    )
-    return result or "No research data found."
+    logger.info("Starting smolagents research pass...")
+    if status_ph:
+        status_ph.info("🕵️ Smolagents is launching search tools to research top PG certifications...")
+
+    try:
+        model = OpenAIModel(
+            model_id="gemini-2.5-flash",
+            api_base="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key=client_wrapper.api_key
+        )
+        
+        search_tool = DuckDuckGoSearchTool()
+        agent = ToolCallingAgent(
+            tools=[search_tool],
+            model=model,
+            max_steps=5
+        )
+        
+        roles_str = ", ".join(target_roles)
+        prompt = (
+            f"The user is a postgraduate/MBA student studying {selected_stream} who wants to obtain these target roles: {roles_str}.\n\n"
+            "Search the web for the absolute best, highly-recognized FREE or open-source online courses, bootcamps, and certifications "
+            "(e.g., from Google, Scrum Alliance, Corporate Finance Institute free certifications, Coursera free tier, PMI) "
+            "that are highly recommended for these roles. Summarize the best 3-5 free courses they should take."
+        )
+        
+        result = agent.run(prompt)
+        return str(result)
+    except Exception as exc:
+        logger.warning("Smolagents research failed: %s. Falling back to native search pass...", exc)
+        # Fallback to native GenAI search tool
+        roles_str = ", ".join(target_roles)
+        contents = (
+            f"The user is a postgraduate student in {selected_stream} aiming to become one of the following: {roles_str}.\n\n"
+            "Search the web for the absolute best, highly-recognized FREE or open-source online courses, bootcamps, and certifications "
+            "that are highly recommended for these specific roles. Summarize the best 3-5 free courses."
+        )
+        tools = [types.Tool(google_search=types.GoogleSearch())]
+        result = call_gemini_with_retry(
+            client=client_wrapper.genai_client,
+            prompt=contents,
+            system_instruction="You are a career research assistant using Google Search to find high-value free courses.",
+            tools=tools,
+            status_ph=status_ph
+        )
+        return result or "No research data found."
 
 def run_extraction_pass(
-    client: genai.Client,
+    client_wrapper: ClientWrapper,
     target_roles: list[str],
     research_summary: str,
     status_ph: Any,
@@ -112,7 +148,7 @@ def run_extraction_pass(
     )
 
     result_text = call_gemini_with_retry(
-        client=client,
+        client=client_wrapper.genai_client,
         prompt=prompt,
         system_instruction=system_instruction,
         response_schema=RESUME_SCHEMA,
@@ -131,7 +167,7 @@ def run_extraction_pass(
         return None
 
 def run_enhancement_pass(
-    client: genai.Client,
+    client_wrapper: ClientWrapper,
     extracted_data: dict,
     status_ph: Any,
 ) -> dict:
@@ -140,7 +176,7 @@ def run_enhancement_pass(
     prompt = PASS2_USER_TEMPLATE.format(input_json=input_json)
     
     result_text = call_gemini_with_retry(
-        client=client,
+        client=client_wrapper.genai_client,
         prompt=prompt,
         system_instruction=PASS2_SYSTEM_PROMPT,
         response_schema=RESUME_SCHEMA,
