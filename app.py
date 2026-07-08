@@ -49,7 +49,6 @@ from core.engine import (
     run_extraction_pass,
     run_enhancement_pass,
     run_scout_pass,
-    run_scout_critic_pass,
 )
 from core.doc_maker import (
     generate_docx_bytes,
@@ -139,8 +138,6 @@ if "research_summary" not in st.session_state:
     st.session_state["research_summary"] = None
 if "scout_data" not in st.session_state:
     st.session_state["scout_data"] = None
-if "scout_critic_data" not in st.session_state:
-    st.session_state["scout_critic_data"] = None
 
 if build_clicked:
     # Input validation
@@ -160,7 +157,6 @@ if build_clicked:
     st.session_state["resume_data"] = None
     st.session_state["plan_data"] = None
     st.session_state["scout_data"] = None
-    st.session_state["scout_critic_data"] = None
 
     status = st.empty()
     success = False
@@ -180,12 +176,8 @@ if build_clicked:
                 st.session_state["plan_data"] = plan
                 
             with st.spinner(f"Using API Key {i+1}... Scouting real-time market intelligence..."):
-                scout_res = run_scout_pass(client, selected_roles, selected_stream, status)
+                scout_res = run_scout_pass(client, selected_roles, status)
                 st.session_state["scout_data"] = scout_res
-                
-            with st.spinner(f"Using API Key {i+1}... Critic Agent auditing market gap..."):
-                critic_res = run_scout_critic_pass(client, selected_roles, scout_res, selected_stream, status)
-                st.session_state["scout_critic_data"] = critic_res
                 
             success = True
             break
@@ -203,16 +195,10 @@ if st.session_state["plan_data"] is not None and st.session_state["resume_data"]
     st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
     st.markdown("### 🗺️ Proposed 3-Year Resume Blueprint")
     
-    if st.session_state.get("scout_critic_data"):
-        c_data = st.session_state["scout_critic_data"]
-        score = c_data.get('Match_Score', 0)
-        color = "green" if score >= 80 else "orange" if score >= 50 else "red"
-        st.markdown(f"**📈 Market Match Score:** <span style='color:{color}; font-weight:bold;'>{score}/100</span>", unsafe_allow_html=True)
-        with st.expander("🔍 View Market Gap Audit"):
-            st.write(c_data.get('Audit_Summary', ''))
-            st.write("**Action Items to Close Gap:**")
-            for item in c_data.get('Action_Items', []):
-                st.write(f"- {item}")
+    if st.session_state.get("scout_data"):
+        st.markdown("**📡 Live Market Scout:**")
+        with st.expander("🔍 View Live Job Vacancies for your target roles"):
+            st.markdown(st.session_state["scout_data"])
                 
     st.info(f"**Core Focus Theme:** {st.session_state['plan_data'].get('Core_Focus', '')}")
     
