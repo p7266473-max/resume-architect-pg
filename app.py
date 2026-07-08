@@ -186,7 +186,7 @@ if build_clicked:
         except Exception as exc:
             logger.warning("Key %d failed: %s", i+1, exc)
             if i < len(keys[:3]) - 1:
-                st.warning(f"⚠️ API Key {i+1} failed. Trying next key...")
+                status.info(f"🔄 Switching to API Key {i+2}...")
                 
     if not success:
         st.error("❌ All provided API keys failed. Please check your quota or credentials.")
