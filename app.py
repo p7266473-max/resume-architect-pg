@@ -215,8 +215,10 @@ if st.session_state["plan_data"] is not None and st.session_state["resume_data"]
             st.markdown(f"- {cert}")
             
     st.markdown("I've designed this 3-year plan sequence. Do you agree with this direction?")
-    user_feedback = st.text_area("Optional changes or directions (e.g. 'Focus more on Cloud', 'Add an AWS cert')", "")
-    approve_clicked = st.button("✅ Approve Plan & Build Full Resume")
+    
+    with st.form("feedback_form"):
+        user_feedback = st.text_area("Optional changes or directions (e.g. 'Focus more on Cloud', 'Add an AWS cert')", "")
+        approve_clicked = st.form_submit_button("✅ Approve Plan & Build Full Resume")
     
     if approve_clicked:
         keys = [k.strip() for k in api_keys_input.replace(',', '\n').split('\n') if k.strip()]
