@@ -236,20 +236,6 @@ if st.session_state["resume_data"] is not None:
     # ── PREVIEW ────────────────────────────────────────────
     render_preview(final_data)
     
-    st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
-
-    # ── PDF CUSTOMIZATION WINDOW ───────────────────────────
-    with st.expander("✨ Advanced PDF Customization (Industry Standard Design)", expanded=False):
-        st.markdown("Below is the HTML template for your stunning PDF resume. You can make manual tweaks here before generating the final PDF!")
-        theme_colors_dict = THEME_COLORS.get(theme, THEME_COLORS["Modern-Tech"])
-        
-        if "pdf_html" not in st.session_state or st.session_state.get("last_theme") != theme:
-            st.session_state["pdf_html"] = generate_premium_pdf_html(final_data, theme_colors_dict)
-            st.session_state["last_theme"] = theme
-            
-        custom_html = st.text_area("HTML & CSS Source", value=st.session_state["pdf_html"], height=350)
-        st.session_state["pdf_html"] = custom_html
-
     # ── GENERATE ALL EXPORTS ───────────────────────────────
     with st.spinner("Building export files…"):
         try:
@@ -259,12 +245,15 @@ if st.session_state["resume_data"] is not None:
             st.error(f"❌ DOCX generation failed: {exc}")
             docx_bytes = b""
             
+        theme_colors_dict = THEME_COLORS.get(theme, THEME_COLORS["Modern-Tech"])
+        pdf_html = generate_premium_pdf_html(final_data, theme_colors_dict)
+            
         try:
-            pdf_bytes = generate_pdf_from_html(st.session_state["pdf_html"])
+            pdf_bytes = generate_pdf_from_html(pdf_html)
         except Exception as exc:
             logger.error("PDF generation failed: %s", exc)
-            st.warning(f"⚠️ PDF generation failed (you may need wkhtmltopdf installed): {exc}")
             pdf_bytes = b""
+            st.error("⚠️ PDF generation failed. If you're on Streamlit Cloud, please reboot the app to install 'wkhtmltopdf' via packages.txt.")
 
         md_content = generate_markdown(final_data)
         ats_content = generate_ats_text(final_data)
@@ -282,6 +271,8 @@ if st.session_state["resume_data"] is not None:
                 mime="application/pdf",
                 type="primary"
             )
+        else:
+            st.button("🚫 PDF Not Available", disabled=True)
 
     with dl2:
         if docx_bytes:
